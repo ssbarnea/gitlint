@@ -3,9 +3,8 @@
 import logging
 import os
 import platform
-import select
+import stat
 import sys
-
 import click
 
 # Error codes
@@ -93,17 +92,17 @@ def build_config(ctx, target, config_path, c, extra_path, ignore, verbose, silen
     ctx.exit(CONFIG_ERROR_CODE)  # return CONFIG_ERROR_CODE on config error
 
 
-def stdin_has_data():
-    """ Helper function that indicates whether the stdin has data incoming or not """
-    # This code was taken from:
-    # https://stackoverflow.com/questions/3762881/how-do-i-check-if-stdin-has-some-data
-
-    # Caveat, this probably doesn't work on Windows because the code is dependent on the unix SELECT syscall.
-    # Details: https://docs.python.org/2/library/select.html#select.select
-    # This isn't a real problem now, because gitlint as a whole doesn't support Windows (see #20).
-    # If we ever do, we probably want to fall back to the old detection mechanism of reading from the local git repo
-    # in case there's no TTY connected to STDIN.
-    return select.select([sys.stdin, ], [], [], 0.0)[0]
+def get_stdin_data():
+    """ Helper function that returns data send to stdin or False if nothing is send """
+    mode = os.fstat(sys.stdin.fileno()).st_mode
+    has_input =  stat.S_ISFIFO(mode) or stat.S_ISREG(mode)
+    if has_input:
+        input_data = sys.stdin.read()
+        # Only return the input data if there's actually something passed
+        # i.e. don't consider empty piped data
+        if len(input_data) != 0:
+            return ustr(input_data)
+    return False
 
 
 @click.group(invoke_without_command=True, epilog="When no COMMAND is specified, gitlint defaults to 'gitlint lint'.")
@@ -157,10 +156,11 @@ def lint(ctx):
     lint_config = ctx.obj[0]
 
     # If we get data via stdin, then let's consider that our commit message, otherwise parse it from the local git repo.
-    if stdin_has_data():
-        stdin_str = ustr(sys.stdin.read())
-        gitcontext = GitContext.from_commit_msg(stdin_str)
+    stdin_input = get_stdin_data()
+    if stdin_input:
+        gitcontext = GitContext.from_commit_msg(stdin_input)
     else:
+        LOG.debug("No or empty data passed to stdin, attempting to read from the local repo.")
         gitcontext = GitContext.from_local_repository(lint_config.target, ctx.obj[2])
 
     number_of_commits = len(gitcontext.commits)
