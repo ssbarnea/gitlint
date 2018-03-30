@@ -54,7 +54,7 @@ def log_system_info():
     LOG.debug("Gitlint version: %s", gitlint.__version__)
 
 
-def build_config(ctx, target, config_path, c, extra_path, ignore, verbose, silent, debug):
+def build_config(ctx, target, config_path, c, extra_path, ignore, format, verbose, silent, debug):
     """ Creates a LintConfig object based on a set of commandline parameters. """
     config_builder = LintConfigBuilder()
     try:
@@ -73,6 +73,8 @@ def build_config(ctx, target, config_path, c, extra_path, ignore, verbose, silen
             config_builder.set_option('general', 'ignore', ignore)
         if silent:
             config_builder.set_option('general', 'verbosity', 0)
+        elif format:
+            config_builder.set_option('general', 'format', format)
         elif verbose > 0:
             config_builder.set_option('general', 'verbosity', verbose)
 
@@ -119,6 +121,7 @@ def stdin_has_data():
               type=click.Path(exists=True, resolve_path=True, readable=True))
 @click.option('--ignore', default="", help="Ignore rules (comma-separated by id or name).")
 @click.option('--msg-filename', type=click.File(), help="Path to a file containing a commit-msg.")
+@click.option('--format', nargs=2, multiple=True, help="Format string to customize gitlint's output format.")
 @click.option('-v', '--verbose', count=True, default=0,
               help="Verbosity, more v's for more verbose output (e.g.: -v, -vv, -vvv). [default: -vvv]", )
 @click.option('-s', '--silent', help="Silent mode (no output). Takes precedence over -v, -vv, -vvv.", is_flag=True)
@@ -127,7 +130,7 @@ def stdin_has_data():
 @click.pass_context
 def cli(  # pylint: disable=too-many-arguments
         ctx, target, config, c, commits, extra_path, ignore, msg_filename,
-        verbose, silent, debug,
+        format, verbose, silent, debug,
 ):
     """ Git lint tool, checks your git commit messages for styling issues """
 
@@ -139,7 +142,7 @@ def cli(  # pylint: disable=too-many-arguments
 
         # Get the lint config from the commandline parameters and
         # store it in the context (click allows storing an arbitrary object in ctx.obj).
-        config, config_builder = build_config(ctx, target, config, c, extra_path, ignore, verbose, silent, debug)
+        config, config_builder = build_config(ctx, target, config, c, extra_path, ignore, format, verbose, silent, debug)
 
         LOG.debug(u"Configuration\n%s", ustr(config))
 
@@ -198,16 +201,16 @@ def lint(ctx):
         if violations:
             # Display the commit hash & new lines intelligently
             if number_of_commits > 1 and commit.sha:
-                linter.display.e(u"{0}Commit {1}:".format(
-                    "\n" if not first_violation or commit is last_commit else "",
-                    commit.sha[:10]
-                ))
+                render_context = {"newline": "\n" if not first_violation or commit is last_commit else "",
+                                  "sha": commit.sha[:10]}
+                linter.display.render_template("commit", render_context)
+
             linter.print_violations(violations)
-            first_violation = False
+            first_violation=False
 
     # cap actual max exit code because bash doesn't like exit codes larger than 255:
     # http://tldp.org/LDP/abs/html/exitcodes.html
-    exit_code = min(MAX_VIOLATION_ERROR_CODE, exit_code)
+    exit_code=min(MAX_VIOLATION_ERROR_CODE, exit_code)
     LOG.debug("Exit Code = %s", exit_code)
     ctx.exit(exit_code)
 
@@ -217,14 +220,14 @@ def lint(ctx):
 def install_hook(ctx):
     """ Install gitlint as a git commit-msg hook. """
     try:
-        lint_config = ctx.obj[0]
+        lint_config=ctx.obj[0]
         hooks.GitHookInstaller.install_commit_msg_hook(lint_config)
         # declare victory :-)
-        hook_path = hooks.GitHookInstaller.commit_msg_hook_path(lint_config)
+        hook_path=hooks.GitHookInstaller.commit_msg_hook_path(lint_config)
         click.echo(u"Successfully installed gitlint commit-msg hook in {0}".format(hook_path))
         ctx.exit(0)
     except hooks.GitHookInstallerError as e:
-        click.echo(ustr(e), err=True)
+        click.echo(ustr(e), err = True)
         ctx.exit(GIT_CONTEXT_ERROR_CODE)
 
 
@@ -233,14 +236,14 @@ def install_hook(ctx):
 def uninstall_hook(ctx):
     """ Uninstall gitlint commit-msg hook. """
     try:
-        lint_config = ctx.obj[0]
+        lint_config=ctx.obj[0]
         hooks.GitHookInstaller.uninstall_commit_msg_hook(lint_config)
         # declare victory :-)
-        hook_path = hooks.GitHookInstaller.commit_msg_hook_path(lint_config)
+        hook_path=hooks.GitHookInstaller.commit_msg_hook_path(lint_config)
         click.echo(u"Successfully uninstalled gitlint commit-msg hook from {0}".format(hook_path))
         ctx.exit(0)
     except hooks.GitHookInstallerError as e:
-        click.echo(ustr(e), err=True)
+        click.echo(ustr(e), err = True)
         ctx.exit(GIT_CONTEXT_ERROR_CODE)
 
 
@@ -248,14 +251,14 @@ def uninstall_hook(ctx):
 @click.pass_context
 def generate_config(ctx):
     """ Generates a sample gitlint config file. """
-    path = click.prompt('Please specify a location for the sample gitlint config file', default=DEFAULT_CONFIG_FILE)
-    path = os.path.abspath(path)
-    dir_name = os.path.dirname(path)
+    path=click.prompt('Please specify a location for the sample gitlint config file', default = DEFAULT_CONFIG_FILE)
+    path=os.path.abspath(path)
+    dir_name=os.path.dirname(path)
     if not os.path.exists(dir_name):
-        click.echo(u"Error: Directory '{0}' does not exist.".format(dir_name), err=True)
+        click.echo(u"Error: Directory '{0}' does not exist.".format(dir_name), err = True)
         ctx.exit(USAGE_ERROR_CODE)
     elif os.path.exists(path):
-        click.echo(u"Error: File \"{0}\" already exists.".format(path), err=True)
+        click.echo(u"Error: File \"{0}\" already exists.".format(path), err = True)
         ctx.exit(USAGE_ERROR_CODE)
 
     LintConfigGenerator.generate_config(path)
