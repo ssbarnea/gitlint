@@ -1,4 +1,4 @@
 -   id: gitlint
     name: gitlint
-    entry: gitlint --msg-filename
+    entry: gitlint
     language: python
