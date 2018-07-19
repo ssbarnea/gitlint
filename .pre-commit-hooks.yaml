@@ -2,3 +2,4 @@
     name: gitlint
     entry: gitlint
     language: python
+    stages: [commit-msg]
