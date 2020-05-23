@@ -1,4 +1,4 @@
-setuptools
+setuptools==46.4.0
 wheel==0.24.0
 Click==6.6
 sh==1.11; sys_platform != 'win32' # sh is not supported on windows
